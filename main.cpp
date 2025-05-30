@@ -1,75 +1,119 @@
 #include <Novice.h>
-#include <cmath>
+#include "math.h"
 
-const char kWindowTitle[] = "LE2C_07_sasnami_sousi";
 
-struct Matrix4x4 {
-	float m[4][4];
+const char kWindowTitle[] = "LE2C_11_sasnami_sousi";
+
+struct Sphere {
+	Vector3 center; //中心点
+	float radius;   //半径
 };
 
-//透視投影行列
-Matrix4x4 MakePerspectiveFovMatrix(float fovY, float aspectRatio, float nearClip, float farClip) {
-	Matrix4x4 result = {};  
 
-	float f = 1.0f / tanf(fovY / 2.0f);
-	
+struct Line{
+	Vector3 origin;//始点
+	Vector3 diff;//終点への差分ベクトル
+};
 
-	result.m[0][0] = f / aspectRatio;
-	result.m[1][1] = f;
-	result.m[2][2] = farClip / (farClip - nearClip);
-	result.m[2][3] = 1.0f;
-	result.m[3][2] = -nearClip*farClip/(farClip - nearClip);
-	result.m[3][3] = 0.0f; 
+struct Ray {
+	Vector3 oringin;//始点
+	Vector3 diff;//終点への差分ベクトル
+};
 
-	return result;
-}
+struct Segment {
+	Vector3 orgin;//始点
+	Vector3 diff;//終点への差分ベクトル
+};
 
-//正射影行列
-Matrix4x4 MakeOrthographicMatrix(float left, float top, float right, float bottom, float nearClip, float farClip) {
-	Matrix4x4 result = {};
+Math math_;
 
-	float width = right - left;
-	float height = top-bottom ;
-	float depth = farClip - nearClip;
+//正射影ベクトル
+Vector3 Project(const Vector3& v1, const Vector3& v2) {
 
-	result.m[0][0] = 2.0f / width;
-	result.m[1][1] = 2.0f / height;
-	result.m[2][2] = 1.0f / depth;
-	result.m[3][0] = -(right + left) / width;
-	result.m[3][1] = -(bottom + top) / height;
-	result.m[3][2] = -nearClip / depth;
-	result.m[3][3] = 1.0f;
+	// v2 の長さが 0 だと除算でエラーになるため、まずチェック
+	float v2LengthSq = v2.x * v2.x + v2.y * v2.y + v2.z * v2.z;
+	if (v2LengthSq == 0.0f) {
+		return { 0.0f, 0.0f, 0.0f }; 
+	}
 
-	return result;
-}
+	// v1 を v2 に正射影: (v1・v2 / |v2|^2) * v2
+	float dot = v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
+	float scale = dot / v2LengthSq;
+
+	return {
+		scale * v2.x,
+		scale * v2.y,
+		scale * v2.z
+	};
+};
+
+//最近接点
+Vector3 ClosestPoint(const Vector3& point, const Segment& segment) {
+	Vector3 segVec = segment.diff - segment.orgin;      // 線分の方向ベクトル
+	Vector3 toPoint = point - segment.orgin;           // 始点から point へのベクトル
+
+	float segLenSq = segVec.x * segVec.x + segVec.y * segVec.y + segVec.z * segVec.z;
+	if (segLenSq == 0.0f) {
+		// 線分が1点しかない（始点と終点が同じ）場合、その点が最近接点
+		return segment.orgin;
+	}
+
+	// 内積を使って射影スカラーを求める
+	float t = (toPoint.x * segVec.x + toPoint.y * segVec.y + toPoint.z * segVec.z) / segLenSq;
+
+	// t を 0 ～ 1 にクランプ（線分の範囲外に出ないようにする）
+	t = max(0.0f, min(1.0f, t));
+
+	// 最近接点の座標を計算
+	return {
+		segment.orgin.x + t * segVec.x,
+		segment.orgin.y + t * segVec.y,
+		segment.orgin.z + t * segVec.z
+	};
+};
 
 
-//ビューポート変換行列
-Matrix4x4 MakeViewportMatrix(float left,float top, float width, float height, float minDepth, float maxDepth) {
-	Matrix4x4 mat = {};
+void DrawSphere(const Sphere& sphere, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
+	const float pi = 3.1415926535f;
+	const uint32_t kSubdivision = 10;  //分離数
+	const float kLonEvery = 2.0f * pi / float(kSubdivision);//軽度１つ分の角度
+	const float kLatEvery = pi / float(kSubdivision);//緯度分割1つ分の角度
 
-	float halfWidth = width * 0.5f;
-	float halfHeight = height * 0.5f;
-	float depthRange = maxDepth - minDepth;
+	//緯度の方向に分割　-π/2~π/2
+	for (uint32_t latIndex = 0; latIndex < kSubdivision; ++latIndex) {
+		float lat = -pi / 2.0f + kLatEvery * latIndex;  //現在の軽度
 
-	mat.m[0][0] = halfWidth;
-	mat.m[1][1] = -halfHeight; // Y軸が上から下へ向かう場合
-	mat.m[2][2] = depthRange;
-	mat.m[3][0] = left + halfWidth;
-	mat.m[3][1] = top + halfHeight;
-	mat.m[3][2] = minDepth;
-	mat.m[3][3] = 1.0f;
+		//軽度の方向に分割
+		for (uint32_t lonIndex = 0; lonIndex < kSubdivision; ++lonIndex) {
+			float lon = lonIndex * kLonEvery;  //現在の軽度
+			Vector3 a = {
+				sphere.center.x + sphere.radius * cosf(lat) * cosf(lon),
+				sphere.center.y + sphere.radius * sinf(lat),
+				sphere.center.z + sphere.radius * cosf(lat) * sinf(lon)
+			};
 
-	return mat;
-}
+			Vector3 b = {
+				sphere.center.x + sphere.radius * cosf(lat + kLatEvery) * cosf(lon),
+				sphere.center.y + sphere.radius * sinf(lat + kLatEvery),
+				sphere.center.z + sphere.radius * cosf(lat + kLatEvery) * sinf(lon)
+			};
 
-static const int kRowHeight = 20;
-static const int kColumnWidth = 60;
-void MatrixScreenPrintf(int x, int y, const Matrix4x4 &matrix, const char *label) {
-	Novice::ScreenPrintf(x, y - kRowHeight, "%s", label); // ラベル表示（上に）
-	for (int row = 0; row < 4; ++row) {
-		for (int column = 0; column < 4; ++column) {
-			Novice::ScreenPrintf(x + column * kColumnWidth, y + row * kRowHeight, "%6.02f", matrix.m[row][column]);
+			Vector3 c = {
+				sphere.center.x + sphere.radius * cosf(lat) * cos(lon + kLonEvery),
+				sphere.center.y + sphere.radius * sinf(lat),
+				sphere.center.z + sphere.radius * cosf(lat) * sinf(lon + kLonEvery)
+			};
+
+			a = math_.Transform(a, viewProjectionMatrix);
+			a = math_.Transform(a, viewportMatrix);
+			b = math_.Transform(b, viewProjectionMatrix);
+			b = math_.Transform(b, viewportMatrix);
+			c = math_.Transform(c, viewProjectionMatrix);
+			c = math_.Transform(c, viewportMatrix);
+
+			Novice::DrawLine(int(a.x), int(a.y), int(b.x), int(b.y), color);
+
+			Novice::DrawLine(int(a.x), int(a.y), int(c.x), int(c.y), color);
 		}
 	}
 }
@@ -84,6 +128,22 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	char keys[256] = {0};
 	char preKeys[256] = {0};
 
+	Segment segment{ {-2.0f,-1.0f,0.0f},{3.0f,2.0f,2.0f} };
+	Vector3 point{ -1.5f,0.6f,0.6f };
+
+	
+	Vector3 rotate{ 0.0f,0.0f,0.0f };
+	Vector3 translate{ 0.0f,0.0f,0.0f };
+	Vector3 cameraPosition{ 0.0f,0.0f,-10.0f };
+	float kWindowWidth = 1280.0f;
+	float kWindowHeight = 720.0f;
+	Vector3 kLocalVertices[3] = {
+	{0.0f, 1.0f, 0.0f},
+	{1.0f, -1.0f, 0.0f},
+	{-1.0f, -1.0f, 0.0f}
+	};
+	
+
 	// ウィンドウの×ボタンが押されるまでループ
 	while (Novice::ProcessMessage() == 0) {
 		// フレームの開始
@@ -97,11 +157,24 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓更新処理ここから
 		///
 
-		Matrix4x4 orthographicMatrix = MakeOrthographicMatrix(-160.0f, 160.0f, 200.0f, 300.0f, 0.0f, 1000.0f);
+		//pointを線分に射影したベクトル
+		Vector3 project = Project(Subtract(point, segment.orgin), segment.diff);
 
-		Matrix4x4 perspectiveFovMatrix = MakePerspectiveFovMatrix(0.63f, 1.33f, 0.1f, 1000.0f);
+		//この値が線分上の点を表す
+		Vector3 closestPoint = ClosestPoint(point, segment);
 
-		Matrix4x4 viewportMatrix= MakeViewportMatrix(100.0f, 200.0f, 600.0f, 300.0f, 0.0f, 1.0f);
+
+		Matrix4x4 worldMatrix = math_.MakeAffineMatrix({ 1.0f,1.0f,1.0f }, rotate, translate);
+		Matrix4x4 cameraMatrix = math_.MakeAffineMatrix({ 1.0f,1.0f,1.0f }, { 0.0f,0.0f,0.0f }, cameraPosition);
+		Matrix4x4 viewMatrix = math_.Inverse(cameraMatrix);
+		Matrix4x4 projectionMatrix = math_.MakePerspectiveFovMatrix(0.45f, float(kWindowWidth) / float(kWindowHeight), 0.1f, 100.0f);
+		Matrix4x4 worldViewProjectionMatrix = math_.Multiply(worldMatrix, math_.Multiply(viewMatrix, projectionMatrix));
+		Matrix4x4 viewportMatrix = math_.MakeViewportMatrix(0, 0, float(kWindowWidth), float(kWindowHeight), 0.0f, 1.0f);
+		Vector3 screenVertices[3];
+		for (uint32_t i = 0; i < 3; ++i) {
+			Vector3 ndcvertex = math_.Transform(kLocalVertices[i], worldViewProjectionMatrix);
+			screenVertices[i] = math_.Transform(ndcvertex, viewportMatrix);
+		}
 
 		///
 		/// ↑更新処理ここまで
@@ -111,9 +184,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓描画処理ここから
 		///
 
-		MatrixScreenPrintf(0, 20, orthographicMatrix, "orthographicMatrix");
-		MatrixScreenPrintf(0, kRowHeight*6, perspectiveFovMatrix, "perspectiveFovMatrix");
-		MatrixScreenPrintf(0, kRowHeight * 11, viewportMatrix, "viewportMatrix");
+
+		
+
+		Sphere pointSphere{ point,0.01f };
+		Sphere ClosestPointSpthere{ closestPoint,0.01f };
+		DrawSphere(pointSphere, viewProjectionMatrix, viewportMatrix, RED);
+		
 
 		///
 		/// ↑描画処理ここまで
