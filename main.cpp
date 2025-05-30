@@ -100,7 +100,7 @@ void DrawSphere(const Sphere &sphere, const Matrix4x4 &viewProjectionMatrix, con
 
 			Novice::DrawLine(int(a.x),int(a.y),int(b.x),int(b.y),color);
 
-			Novice::DrawLine(int(b.x),int(b.y),int(c.x),int(c.y),color);
+			Novice::DrawLine(int(a.x),int(a.y),int(c.x),int(c.y),color);
 		}
 	}
 }
