@@ -1,6 +1,7 @@
 #include <Novice.h>
 #include "math.h"
-
+#include <imgui.h>
+#include <algorithm>
 
 const char kWindowTitle[] = "LE2C_11_sasnami_sousi";
 
@@ -21,7 +22,7 @@ struct Ray {
 };
 
 struct Segment {
-	Vector3 orgin;//始点
+	Vector3 origin;//始点
 	Vector3 diff;//終点への差分ベクトル
 };
 
@@ -49,26 +50,26 @@ Vector3 Project(const Vector3& v1, const Vector3& v2) {
 
 //最近接点
 Vector3 ClosestPoint(const Vector3& point, const Segment& segment) {
-	Vector3 segVec = segment.diff - segment.orgin;      // 線分の方向ベクトル
-	Vector3 toPoint = point - segment.orgin;           // 始点から point へのベクトル
+	Vector3 segVec = math_.Subtract(segment.diff , segment.origin);      // 線分の方向ベクトル
+	Vector3 toPoint = math_.Subtract(point , segment.origin);           // 始点から point へのベクトル
 
 	float segLenSq = segVec.x * segVec.x + segVec.y * segVec.y + segVec.z * segVec.z;
 	if (segLenSq == 0.0f) {
 		// 線分が1点しかない（始点と終点が同じ）場合、その点が最近接点
-		return segment.orgin;
+		return segment.origin;
 	}
 
 	// 内積を使って射影スカラーを求める
 	float t = (toPoint.x * segVec.x + toPoint.y * segVec.y + toPoint.z * segVec.z) / segLenSq;
 
 	// t を 0 ～ 1 にクランプ（線分の範囲外に出ないようにする）
-	t = max(0.0f, min(1.0f, t));
+	t = std::clamp(t, 0.0f, 1.0f);
 
 	// 最近接点の座標を計算
 	return {
-		segment.orgin.x + t * segVec.x,
-		segment.orgin.y + t * segVec.y,
-		segment.orgin.z + t * segVec.z
+		segment.origin.x + t * segVec.x,
+		segment.origin.y + t * segVec.y,
+		segment.origin.z + t * segVec.z
 	};
 };
 
@@ -118,6 +119,51 @@ void DrawSphere(const Sphere& sphere, const Matrix4x4& viewProjectionMatrix, con
 	}
 }
 
+
+void DrawGrid(const Matrix4x4 &viewProjectionMatrix, const Matrix4x4 &viewportMatrix) {
+	const float kGridHalfWidth = 2.0f;                                      //Gridの半分の幅
+	const uint32_t kSubdivison = 10;                                        //分離数
+	const float kGridEvery = (kGridHalfWidth * 2.0f) / float(kSubdivison);  //1つ分の長さ
+
+	//奥から手前への線を順々に引いていく
+	for (uint32_t xIndex = 0; xIndex <= kSubdivison; ++xIndex) {
+		//ワールド座標系上の始点と終点を求める
+		float x = -kGridHalfWidth + xIndex * kGridEvery;
+		Vector3 start = { x, 0.0f, -kGridHalfWidth };
+		Vector3 end = { x, 0.0f, kGridHalfWidth };
+
+		//スクリーン座標系まで変換をかける
+		start = math_.Transform(start, viewProjectionMatrix);
+		start = math_.Transform(start, viewportMatrix);
+		end = math_.Transform(end, viewProjectionMatrix);
+		end = math_.Transform(end, viewportMatrix);
+
+		//変換した座標を使って
+		Novice::DrawLine(static_cast<int>(start.x), static_cast<int>(start.y),
+			static_cast<int>(end.x), static_cast<int>(end.y), 0xAAAAAAFF);
+
+
+
+	}
+	//左から右も同じように順々に引いていく
+	for (uint32_t zIndex = 0; zIndex <= kSubdivison; ++zIndex) {
+		float z = -kGridHalfWidth + zIndex * kGridEvery;
+		Vector3 start = { -kGridHalfWidth, 0.0f, z };
+		Vector3 end = { kGridHalfWidth, 0.0f, z };
+
+		// ワールド→スクリーン変換
+		start = math_.Transform(start, viewProjectionMatrix);
+		start = math_.Transform(start, viewportMatrix);
+		end = math_.Transform(end, viewProjectionMatrix);
+		end = math_.Transform(end, viewportMatrix);
+
+		// 線を描画
+		Novice::DrawLine(static_cast<int>(start.x), static_cast<int>(start.y),
+			static_cast<int>(end.x), static_cast<int>(end.y), 0xAAAAAAFF); // グレー
+	}
+
+}
+
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
@@ -131,12 +177,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	Segment segment{ {-2.0f,-1.0f,0.0f},{3.0f,2.0f,2.0f} };
 	Vector3 point{ -1.5f,0.6f,0.6f };
 
+	Vector3 cameraTranslate{ 0.0f,-1.0f,0.0f };
+	Vector3 cameraRotate{ 0.0f,0.0f,0.0f };
+	Vector3 cameraPosition{ 0.0f,0.33f,-10.0f };
 	
-	Vector3 rotate{ 0.0f,0.0f,0.0f };
-	Vector3 translate{ 0.0f,0.0f,0.0f };
-	Vector3 cameraPosition{ 0.0f,0.0f,-10.0f };
-	float kWindowWidth = 1280.0f;
-	float kWindowHeight = 720.0f;
 	Vector3 kLocalVertices[3] = {
 	{0.0f, 1.0f, 0.0f},
 	{1.0f, -1.0f, 0.0f},
@@ -158,23 +202,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		///
 
 		//pointを線分に射影したベクトル
-		Vector3 project = Project(Subtract(point, segment.orgin), segment.diff);
+		Vector3 project = Project(math_.Subtract(point, segment.origin), segment.diff);
 
 		//この値が線分上の点を表す
 		Vector3 closestPoint = ClosestPoint(point, segment);
 
 
-		Matrix4x4 worldMatrix = math_.MakeAffineMatrix({ 1.0f,1.0f,1.0f }, rotate, translate);
+		Matrix4x4 worldMatrix = math_.MakeAffineMatrix({ 1.0f, 1.0f, 1.0f }, cameraRotate, cameraTranslate);
 		Matrix4x4 cameraMatrix = math_.MakeAffineMatrix({ 1.0f,1.0f,1.0f }, { 0.0f,0.0f,0.0f }, cameraPosition);
 		Matrix4x4 viewMatrix = math_.Inverse(cameraMatrix);
-		Matrix4x4 projectionMatrix = math_.MakePerspectiveFovMatrix(0.45f, float(kWindowWidth) / float(kWindowHeight), 0.1f, 100.0f);
-		Matrix4x4 worldViewProjectionMatrix = math_.Multiply(worldMatrix, math_.Multiply(viewMatrix, projectionMatrix));
-		Matrix4x4 viewportMatrix = math_.MakeViewportMatrix(0, 0, float(kWindowWidth), float(kWindowHeight), 0.0f, 1.0f);
-		Vector3 screenVertices[3];
-		for (uint32_t i = 0; i < 3; ++i) {
-			Vector3 ndcvertex = math_.Transform(kLocalVertices[i], worldViewProjectionMatrix);
-			screenVertices[i] = math_.Transform(ndcvertex, viewportMatrix);
-		}
+		Matrix4x4 projectionMatrix = math_.MakePerspectiveFovMatrix(0.45f, 1280.0f / 720.0f, 0.1f, 100.0f);
+		Matrix4x4 viewProjectionMatrix = math_.Multiply(worldMatrix, math_.Multiply(viewMatrix, projectionMatrix));
+		Matrix4x4 viewportMatrix = math_.MakeViewportMatrix(1280, 720);
 
 		///
 		/// ↑更新処理ここまで
@@ -185,12 +224,27 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		///
 
 
-		
+		ImGui::Begin("Window");
+		ImGui::DragFloat3("Point", &point.x, 0.01f);
+		ImGui::DragFloat3("Segment origin", &segment.origin.x, 0.01f);
+		ImGui::DragFloat3("Segment diff", &segment.diff.x, 0.01f);
+		ImGui::InputFloat3("Project", &project.x, "%.3f", ImGuiInputTextFlags_ReadOnly);
+		ImGui::DragFloat3("CameraTranslate", &cameraTranslate.x, 0.01f);
+		ImGui::DragFloat3("CameraRotate", &cameraRotate.x, 0.01f);
+		ImGui::End();
 
 		Sphere pointSphere{ point,0.01f };
 		Sphere ClosestPointSpthere{ closestPoint,0.01f };
 		DrawSphere(pointSphere, viewProjectionMatrix, viewportMatrix, RED);
+		DrawSphere(ClosestPointSpthere, viewProjectionMatrix, viewportMatrix, BLACK);
+
+
+		Vector3 start = math_.Transform(math_.Transform(segment.origin, viewProjectionMatrix), viewportMatrix);
+		Vector3 end = math_.Transform(math_.Transform(math_.Add(segment.origin, segment.diff), viewProjectionMatrix), viewportMatrix);
+		Novice::DrawLine(int(start.x), int(start.y), int(end.x), int(end.y), WHITE);
+
 		
+		DrawGrid(viewProjectionMatrix, viewportMatrix);
 
 		///
 		/// ↑描画処理ここまで

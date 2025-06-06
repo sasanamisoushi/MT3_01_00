@@ -1,4 +1,64 @@
-﻿﻿#include "Math.h"
+﻿#include "math.h"
+Vector3 &operator+=(Vector3 &lhv, const Vector3 &rhv) {
+	lhv.x += rhv.x;
+	lhv.y += rhv.y;
+	lhv.z += rhv.z;
+	return lhv;
+}
+
+Vector3 &operator-=(Vector3 &lhv, const Vector3 &rhv) {
+	lhv.x -= rhv.x;
+	lhv.y -= rhv.y;
+	lhv.z -= rhv.z;
+	return lhv;
+}
+
+Vector3 &operator*=(Vector3 &v, float s) {
+	v.x *= s;
+	v.y *= s;
+	v.z *= s;
+	return v;
+}
+
+Vector3 &operator/=(Vector3 &v, float s) {
+	v.x /= s;
+	v.y /= s;
+	v.z /= s;
+	return v;
+}
+
+Vector3 &operator+(const Vector3 &v1, const Vector3 &v2) {
+	Vector3 temp(v1);
+	return temp += v2;
+}
+
+const Vector3 operator*(const Vector3 &v1, const float f) {
+	Vector3 temp(v1);
+	return temp *= f;
+}
+
+
+
+//加算
+Vector3 Math::Add(const Vector3 &v1, const Vector3 &v2) {
+	Vector3 result = {};
+	result.x = v1.x + v2.x;
+	result.y = v1.y + v2.y;
+	result.z = v1.z + v2.z;
+	return result;
+}
+
+
+//減算
+Vector3 Math::Subtract(const Vector3 &v1, const Vector3 &v2) {
+	Vector3 result = {};
+	result.x = v1.x - v2.x;
+	result.y = v1.y - v2.y;
+	result.z = v1.z - v2.z;
+	return result;
+}
+
+
 
 //平行移動
 Matrix4x4 Math::MakeTranslateMatrix(const Vector3 & translate) {
@@ -118,7 +178,7 @@ Matrix4x4 Math::MakeViewportMatrix(float width, float height) {
 }
 
 //逆行列
-Matrix4x4 Inverse(const Matrix4x4& m) {
+Matrix4x4 Math::Inverse(const Matrix4x4& m) {
 	Matrix4x4 result = {};
 	float determinant =
 		m.m[0][0] * m.m[1][1] * m.m[2][2] * m.m[3][3] + m.m[0][0] * m.m[1][2] * m.m[2][3] * m.m[3][1] + m.m[0][0] * m.m[1][3] * m.m[2][1] * m.m[3][2] -

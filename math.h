@@ -1,10 +1,26 @@
-﻿﻿#pragma once
+﻿#pragma once
 #include "KamataEngine.h"
 
 using namespace KamataEngine;
 
+Vector3 &operator+=(Vector3 &lhv, const Vector3 &rhv);
+Vector3 &operator-=(Vector3 &lhv, const Vector3 &rhv);
+Vector3 &operator*=(Vector3 &v, float s);
+Vector3 &operator/=(Vector3 &v, float s);
+
+Vector3 &operator+(const Vector3 &v1, const Vector3 &v2);
+const Vector3 operator*(const Vector3 &v1, const float f);
+
+
+
 class Math {
 public:
+
+	//加算
+	Vector3 Add(const Vector3 &v1, const Vector3 &v2);
+
+	//減算
+	Vector3 Subtract(const Vector3 &v1, const Vector3 &v2);
 
 	//平行移動
 	Matrix4x4 MakeTranslateMatrix(const Vector3& translate);
