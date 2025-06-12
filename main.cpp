@@ -1,124 +1,22 @@
-#include <Novice.h>
-#include "math.h"
-#include <imgui.h>
-#include <algorithm>
 
-const char kWindowTitle[] = "LE2C_11_sasnami_sousi";
+#include <Novice.h>
+#include <cstdint>
+#include <numbers>
+#include <imgui.h>
+#include "Math.h"
+using namespace KamataEngine::MathUtility;
+
+using std::numbers::pi_v;
+
+const char kWindowTitle[] = "LE2C_07_sasnami_sousi";
 
 struct Sphere {
 	Vector3 center; //中心点
 	float radius;   //半径
-};
-
-
-struct Line{
-	Vector3 origin;//始点
-	Vector3 diff;//終点への差分ベクトル
-};
-
-struct Ray {
-	Vector3 oringin;//始点
-	Vector3 diff;//終点への差分ベクトル
-};
-
-struct Segment {
-	Vector3 origin;//始点
-	Vector3 diff;//終点への差分ベクトル
+	Vector3 color;
 };
 
 Math math_;
-
-//正射影ベクトル
-Vector3 Project(const Vector3& v1, const Vector3& v2) {
-
-	// v2 の長さが 0 だと除算でエラーになるため、まずチェック
-	float v2LengthSq = v2.x * v2.x + v2.y * v2.y + v2.z * v2.z;
-	if (v2LengthSq == 0.0f) {
-		return { 0.0f, 0.0f, 0.0f }; 
-	}
-
-	// v1 を v2 に正射影: (v1・v2 / |v2|^2) * v2
-	float dot = v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
-	float scale = dot / v2LengthSq;
-
-	return {
-		scale * v2.x,
-		scale * v2.y,
-		scale * v2.z
-	};
-};
-
-//最近接点
-Vector3 ClosestPoint(const Vector3& point, const Segment& segment) {
-	Vector3 segVec = math_.Subtract(segment.diff , segment.origin);      // 線分の方向ベクトル
-	Vector3 toPoint = math_.Subtract(point , segment.origin);           // 始点から point へのベクトル
-
-	float segLenSq = segVec.x * segVec.x + segVec.y * segVec.y + segVec.z * segVec.z;
-	if (segLenSq == 0.0f) {
-		// 線分が1点しかない（始点と終点が同じ）場合、その点が最近接点
-		return segment.origin;
-	}
-
-	// 内積を使って射影スカラーを求める
-	float t = (toPoint.x * segVec.x + toPoint.y * segVec.y + toPoint.z * segVec.z) / segLenSq;
-
-	// t を 0 ～ 1 にクランプ（線分の範囲外に出ないようにする）
-	t = std::clamp(t, 0.0f, 1.0f);
-
-	// 最近接点の座標を計算
-	return {
-		segment.origin.x + t * segVec.x,
-		segment.origin.y + t * segVec.y,
-		segment.origin.z + t * segVec.z
-	};
-};
-
-
-void DrawSphere(const Sphere& sphere, const Matrix4x4& viewProjectionMatrix, const Matrix4x4& viewportMatrix, uint32_t color) {
-	const float pi = 3.1415926535f;
-	const uint32_t kSubdivision = 10;  //分離数
-	const float kLonEvery = 2.0f * pi / float(kSubdivision);//軽度１つ分の角度
-	const float kLatEvery = pi / float(kSubdivision);//緯度分割1つ分の角度
-
-	//緯度の方向に分割　-π/2~π/2
-	for (uint32_t latIndex = 0; latIndex < kSubdivision; ++latIndex) {
-		float lat = -pi / 2.0f + kLatEvery * latIndex;  //現在の軽度
-
-		//軽度の方向に分割
-		for (uint32_t lonIndex = 0; lonIndex < kSubdivision; ++lonIndex) {
-			float lon = lonIndex * kLonEvery;  //現在の軽度
-			Vector3 a = {
-				sphere.center.x + sphere.radius * cosf(lat) * cosf(lon),
-				sphere.center.y + sphere.radius * sinf(lat),
-				sphere.center.z + sphere.radius * cosf(lat) * sinf(lon)
-			};
-
-			Vector3 b = {
-				sphere.center.x + sphere.radius * cosf(lat + kLatEvery) * cosf(lon),
-				sphere.center.y + sphere.radius * sinf(lat + kLatEvery),
-				sphere.center.z + sphere.radius * cosf(lat + kLatEvery) * sinf(lon)
-			};
-
-			Vector3 c = {
-				sphere.center.x + sphere.radius * cosf(lat) * cos(lon + kLonEvery),
-				sphere.center.y + sphere.radius * sinf(lat),
-				sphere.center.z + sphere.radius * cosf(lat) * sinf(lon + kLonEvery)
-			};
-
-			a = math_.Transform(a, viewProjectionMatrix);
-			a = math_.Transform(a, viewportMatrix);
-			b = math_.Transform(b, viewProjectionMatrix);
-			b = math_.Transform(b, viewportMatrix);
-			c = math_.Transform(c, viewProjectionMatrix);
-			c = math_.Transform(c, viewportMatrix);
-
-			Novice::DrawLine(int(a.x), int(a.y), int(b.x), int(b.y), color);
-
-			Novice::DrawLine(int(a.x), int(a.y), int(c.x), int(c.y), color);
-		}
-	}
-}
-
 
 void DrawGrid(const Matrix4x4 &viewProjectionMatrix, const Matrix4x4 &viewportMatrix) {
 	const float kGridHalfWidth = 2.0f;                                      //Gridの半分の幅
@@ -164,6 +62,63 @@ void DrawGrid(const Matrix4x4 &viewProjectionMatrix, const Matrix4x4 &viewportMa
 
 }
 
+
+void DrawSphere(const Sphere &sphere, const Matrix4x4 &viewProjectionMatrix, const Matrix4x4 &viewportMatrix, uint32_t color) {
+	const float pi = 3.1415926535f;
+	const uint32_t kSubdivision = 10;  //分離数
+	const float kLonEvery = 2.0f * pi / float(kSubdivision);//軽度１つ分の角度
+	const float kLatEvery = pi / float(kSubdivision);//緯度分割1つ分の角度
+
+	//緯度の方向に分割　-π/2~π/2
+	for (uint32_t latIndex = 0; latIndex < kSubdivision; ++latIndex) {
+		float lat = -pi / 2.0f + kLatEvery * latIndex;  //現在の軽度
+
+		//軽度の方向に分割
+		for (uint32_t lonIndex = 0; lonIndex < kSubdivision; ++lonIndex) {
+			float lon = lonIndex * kLonEvery;  //現在の軽度
+			Vector3 a = {
+				sphere.center.x + sphere.radius * cosf(lat) * cosf(lon),
+				sphere.center.y + sphere.radius * sinf(lat),
+				sphere.center.z + sphere.radius * cosf(lat) * sinf(lon)
+			};
+
+			Vector3 b = {
+				sphere.center.x + sphere.radius * cosf(lat + kLatEvery) * cosf(lon),
+				sphere.center.y + sphere.radius * sinf(lat + kLatEvery),
+				sphere.center.z + sphere.radius * cosf(lat + kLatEvery) * sinf(lon)
+			};
+
+			Vector3 c = {
+				sphere.center.x + sphere.radius * cosf(lat) * cos(lon + kLonEvery),
+				sphere.center.y + sphere.radius * sinf(lat),
+				sphere.center.z + sphere.radius * cosf(lat) * sinf(lon + kLonEvery)
+			};
+
+			a = math_.Transform(a, viewProjectionMatrix);
+			a = math_.Transform(a, viewportMatrix);
+			b = math_.Transform(b, viewProjectionMatrix);
+			b = math_.Transform(b, viewportMatrix);
+			c = math_.Transform(c, viewProjectionMatrix);
+			c = math_.Transform(c, viewportMatrix);
+
+			Novice::DrawLine(int(a.x), int(a.y), int(b.x), int(b.y), color);
+
+			Novice::DrawLine(int(a.x), int(a.y), int(c.x), int(c.y), color);
+		}
+	}
+}
+
+bool IsCollision(const Sphere &s1, const Sphere &s2) {
+	float distance = Length(s1.center - s2.center);
+	return distance <= (s1.radius + s2.radius);
+}
+
+uint32_t ConvertColor(const Vector3 &color) {
+	return (static_cast<int>(color.x * 255.0f) << 24) |
+		(static_cast<int>(color.y * 255.0f) << 16) |
+		(static_cast<int>(color.z * 255.0f) << 8) | 0xFF;
+}
+
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
@@ -171,22 +126,16 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	Novice::Initialize(kWindowTitle, 1280, 720);
 
 	// キー入力結果を受け取る箱
-	char keys[256] = {0};
-	char preKeys[256] = {0};
+	char keys[256] = { 0 };
+	char preKeys[256] = { 0 };
 
-	Segment segment{ {-2.0f,-1.0f,0.0f},{3.0f,2.0f,2.0f} };
-	Vector3 point{ -1.5f,0.6f,0.6f };
 
-	Vector3 cameraTranslate{ 0.0f,-1.0f,0.0f };
-	Vector3 cameraRotate{ 0.0f,0.0f,0.0f };
-	Vector3 cameraPosition{ 0.0f,0.33f,-10.0f };
-	
-	Vector3 kLocalVertices[3] = {
-	{0.0f, 1.0f, 0.0f},
-	{1.0f, -1.0f, 0.0f},
-	{-1.0f, -1.0f, 0.0f}
-	};
-	
+	Vector3 cameraTranslate{ 0.0f,0.5f,-7.49f };
+	Vector3 cameraRotate{ -0.2f,0.0f,0.0f };
+	Sphere sphere1{ {0.0f, 0.0f, 0.5f}, 1.0f,{1.0f, 1.0f, 1.0f} };
+	Sphere sphere2{ {1.5f, 0.0f, 0.3f}, 0.5f,{1.0f, 1.0f, 1.0f} };
+
+
 
 	// ウィンドウの×ボタンが押されるまでループ
 	while (Novice::ProcessMessage() == 0) {
@@ -201,19 +150,18 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓更新処理ここから
 		///
 
-		//pointを線分に射影したベクトル
-		Vector3 project = Project(math_.Subtract(point, segment.origin), segment.diff);
 
-		//この値が線分上の点を表す
-		Vector3 closestPoint = ClosestPoint(point, segment);
+		if (IsCollision(sphere1, sphere2)) {
+			sphere1.color = { 1.0f, 0.0f, 0.0f };  // 衝突した方だけ色を変える
+		} else {
+			sphere1.color = { 1.0f, 1.0f, 1.0f };  // 元に戻す
+		}
 
-
-		Matrix4x4 worldMatrix = math_.MakeAffineMatrix({ 1.0f, 1.0f, 1.0f }, cameraRotate, cameraTranslate);
-		Matrix4x4 cameraMatrix = math_.MakeAffineMatrix({ 1.0f,1.0f,1.0f }, { 0.0f,0.0f,0.0f }, cameraPosition);
-		Matrix4x4 viewMatrix = math_.Inverse(cameraMatrix);
+		Matrix4x4 viewMatrix = math_.MakeAffineMatrix({ 1.0f, 1.0f, 1.0f }, cameraRotate, cameraTranslate);
 		Matrix4x4 projectionMatrix = math_.MakePerspectiveFovMatrix(0.45f, 1280.0f / 720.0f, 0.1f, 100.0f);
-		Matrix4x4 viewProjectionMatrix = math_.Multiply(worldMatrix, math_.Multiply(viewMatrix, projectionMatrix));
+		Matrix4x4 viewProjectionMatrix = math_.Multiply(viewMatrix, projectionMatrix);
 		Matrix4x4 viewportMatrix = math_.MakeViewportMatrix(1280, 720);
+
 
 		///
 		/// ↑更新処理ここまで
@@ -223,29 +171,19 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓描画処理ここから
 		///
 
-
 		ImGui::Begin("Window");
-		ImGui::DragFloat3("Point", &point.x, 0.01f);
-		ImGui::DragFloat3("Segment origin", &segment.origin.x, 0.01f);
-		ImGui::DragFloat3("Segment diff", &segment.diff.x, 0.01f);
-		ImGui::InputFloat3("Project", &project.x, "%.3f", ImGuiInputTextFlags_ReadOnly);
 		ImGui::DragFloat3("CameraTranslate", &cameraTranslate.x, 0.01f);
 		ImGui::DragFloat3("CameraRotate", &cameraRotate.x, 0.01f);
+		ImGui::DragFloat3("SphereCenter1", &sphere1.center.x, 0.01f);
+		ImGui::DragFloat("SphereRadius1", &sphere1.radius, 0.01f);
+		ImGui::DragFloat3("SphereCenter2", &sphere2.center.x, 0.01f);
+		ImGui::DragFloat("SphereRadius2", &sphere2.radius, 0.01f);
 		ImGui::End();
 
-		Sphere pointSphere{ point,0.01f };
-		Sphere ClosestPointSpthere{ closestPoint,0.01f };
-		DrawSphere(pointSphere, viewProjectionMatrix, viewportMatrix, RED);
-		DrawSphere(ClosestPointSpthere, viewProjectionMatrix, viewportMatrix, BLACK);
 
-
-		Vector3 start = math_.Transform(math_.Transform(segment.origin, viewProjectionMatrix), viewportMatrix);
-		Vector3 end = math_.Transform(math_.Transform(math_.Add(segment.origin, segment.diff), viewProjectionMatrix), viewportMatrix);
-		Novice::DrawLine(int(start.x), int(start.y), int(end.x), int(end.y), WHITE);
-
-		
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
-
+		DrawSphere(sphere1, viewProjectionMatrix, viewportMatrix, ConvertColor(sphere1.color));
+		DrawSphere(sphere2, viewProjectionMatrix, viewportMatrix, ConvertColor(sphere2.color));
 		///
 		/// ↑描画処理ここまで
 		///
