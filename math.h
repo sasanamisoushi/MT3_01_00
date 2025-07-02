@@ -40,6 +40,8 @@ public:
 	// 積
 	Matrix4x4 Multiply(const Matrix4x4& m1, const Matrix4x4& m2);
 
+	Vector3 Multiply(float scalar, const Vector3 &m1);
+
 	// アフィン変換行列
 	Matrix4x4 MakeAffineMatrix(const Vector3& scale, const Vector3& rotate, const Vector3& translate);
 

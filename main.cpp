@@ -1,9 +1,10 @@
 
 #include <Novice.h>
-#include <cstdint>
+
 #include <numbers>
 #include <imgui.h>
 #include "Math.h"
+
 using namespace KamataEngine::MathUtility;
 
 using std::numbers::pi_v;
@@ -14,6 +15,11 @@ struct Sphere {
 	Vector3 center; //中心点
 	float radius;   //半径
 	Vector3 color;
+};
+
+struct Plane {
+	Vector3 normal;
+	float distance;
 };
 
 Math math_;
@@ -108,9 +114,16 @@ void DrawSphere(const Sphere &sphere, const Matrix4x4 &viewProjectionMatrix, con
 	}
 }
 
-bool IsCollision(const Sphere &s1, const Sphere &s2) {
-	float distance = Length(s1.center - s2.center);
-	return distance <= (s1.radius + s2.radius);
+bool IsCollision(const Sphere &sphere, const Plane &plane) {
+	// 球の中心と平面との距離を計算
+	float signedDistance =
+		sphere.center.x * plane.normal.x +
+		sphere.center.y * plane.normal.y +
+		sphere.center.z * plane.normal.z -
+		plane.distance;
+
+
+	return fabsf(signedDistance) <= sphere.radius;
 }
 
 uint32_t ConvertColor(const Vector3 &color) {
@@ -118,6 +131,51 @@ uint32_t ConvertColor(const Vector3 &color) {
 		(static_cast<int>(color.y * 255.0f) << 16) |
 		(static_cast<int>(color.z * 255.0f) << 8) | 0xFF;
 }
+
+Vector3 Perpendicular(const Vector3 &vector) {
+	if (vector.x != 0.0f || vector.y != 0.0f) {
+		return { -vector.y, vector.x, 0.0f };
+	}
+	return { 0.0f, -vector.z, vector.y };
+}
+
+Vector3 Normalize(const Vector3 &v) {
+	float length = Length(v);
+	if (length == 0.0f) return { 0.0f, 0.0f, 0.0f };
+	return { v.x / length, v.y / length, v.z / length };
+}
+
+Vector3 cross(const Vector3 &v1, const Vector3 &v2) {
+	Vector3 result;
+	result.x = v1.y * v2.z - v1.z * v2.y;
+	result.y = v1.z * v2.x - v1.x * v2.z;
+	result.z = v1.x * v2.y - v1.y * v2.x;
+	return result;
+}
+
+void DrawPlane(const Plane &plane, const Matrix4x4 &viewProjectionMatrix, const Matrix4x4 &viewportMatrix, uint32_t color) {
+	Vector3 center = math_.Multiply(plane.distance, plane.normal);
+	Vector3 perpendiculars[4];
+	perpendiculars[0] = Normalize(Perpendicular(plane.normal));
+	perpendiculars[1] = { -perpendiculars[0].x,-perpendiculars[0].y, - perpendiculars[0].z };
+	perpendiculars[2] = cross(plane.normal, perpendiculars[0]);
+	perpendiculars[3] = { -perpendiculars[2].x,-perpendiculars[2].y,-perpendiculars[2].z };
+
+	
+	Vector3 points[4];
+	for (int32_t index = 0; index < 4; ++index) {
+		Vector3 extend = math_.Multiply(2.0f, perpendiculars[index]);
+		Vector3 point = math_.Add(center, extend);
+		points[index] = math_.Transform(math_.Transform(point, viewProjectionMatrix), viewportMatrix);
+	}
+
+	Novice::DrawLine((int)points[0].x, (int)points[0].y, (int)points[2].x, (int)points[2].y, color);
+	Novice::DrawLine((int)points[2].x, (int)points[2].y, (int)points[1].x, (int)points[1].y, color);
+	Novice::DrawLine((int)points[1].x, (int)points[1].y, (int)points[3].x, (int)points[3].y, color);
+	Novice::DrawLine((int)points[3].x, (int)points[3].y, (int)points[0].x, (int)points[0].y, color);
+}
+
+Plane plane = { {0.0f,1.0f,0.0f},0.0f };
 
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
@@ -133,8 +191,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	Vector3 cameraTranslate{ 0.0f,0.5f,-7.49f };
 	Vector3 cameraRotate{ -0.2f,0.0f,0.0f };
 	Sphere sphere1{ {0.0f, 0.0f, 0.5f}, 1.0f,{1.0f, 1.0f, 1.0f} };
-	Sphere sphere2{ {1.5f, 0.0f, 0.3f}, 0.5f,{1.0f, 1.0f, 1.0f} };
-
+	
 
 
 	// ウィンドウの×ボタンが押されるまでループ
@@ -150,8 +207,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓更新処理ここから
 		///
 
+		plane.normal = Normalize(plane.normal);
 
-		if (IsCollision(sphere1, sphere2)) {
+		if (IsCollision(sphere1, plane)) {
 			sphere1.color = { 1.0f, 0.0f, 0.0f };  // 衝突した方だけ色を変える
 		} else {
 			sphere1.color = { 1.0f, 1.0f, 1.0f };  // 元に戻す
@@ -162,7 +220,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		Matrix4x4 viewProjectionMatrix = math_.Multiply(viewMatrix, projectionMatrix);
 		Matrix4x4 viewportMatrix = math_.MakeViewportMatrix(1280, 720);
 
-
+		
 		///
 		/// ↑更新処理ここまで
 		///
@@ -176,14 +234,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		ImGui::DragFloat3("CameraRotate", &cameraRotate.x, 0.01f);
 		ImGui::DragFloat3("SphereCenter1", &sphere1.center.x, 0.01f);
 		ImGui::DragFloat("SphereRadius1", &sphere1.radius, 0.01f);
-		ImGui::DragFloat3("SphereCenter2", &sphere2.center.x, 0.01f);
-		ImGui::DragFloat("SphereRadius2", &sphere2.radius, 0.01f);
+		ImGui::DragFloat3("plane.Normal", &plane.normal.x, 0.01f);
+		ImGui::DragFloat("Plane Distance", &plane.distance, 0.01f);
 		ImGui::End();
 
 
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
 		DrawSphere(sphere1, viewProjectionMatrix, viewportMatrix, ConvertColor(sphere1.color));
-		DrawSphere(sphere2, viewProjectionMatrix, viewportMatrix, ConvertColor(sphere2.color));
+		DrawPlane(plane, viewProjectionMatrix, viewportMatrix, 0x00FF00FF);
+
 		///
 		/// ↑描画処理ここまで
 		///

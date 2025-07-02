@@ -39,6 +39,7 @@ const Vector3 operator*(const Vector3 &v1, const float f) {
 
 
 
+
 //加算
 Vector3 Math::Add(const Vector3 &v1, const Vector3 &v2) {
 	Vector3 result = {};
@@ -118,6 +119,10 @@ Matrix4x4 Math::Multiply(const Matrix4x4& m1, const Matrix4x4& m2) {
 		}
 	}
 	return result;
+}
+
+Vector3 Math::Multiply(float scalar, const Vector3 &m1) {
+	return {m1.x*scalar,m1.y*scalar,m1.z*scalar};
 }
 
 //アフィン変換
