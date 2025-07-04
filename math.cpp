@@ -125,6 +125,15 @@ Vector3 Math::Multiply(float scalar, const Vector3 &m1) {
 	return {m1.x*scalar,m1.y*scalar,m1.z*scalar};
 }
 
+Vector4 Math::Multiply(const Vector4 &v, const Matrix4x4 &m) {
+	Vector4 result;
+	result.x = v.x * m.m[0][0] + v.y * m.m[1][0] + v.z * m.m[2][0] + v.w * m.m[3][0];
+	result.y = v.x * m.m[0][1] + v.y * m.m[1][1] + v.z * m.m[2][1] + v.w * m.m[3][1];
+	result.z = v.x * m.m[0][2] + v.y * m.m[1][2] + v.z * m.m[2][2] + v.w * m.m[3][2];
+	result.w = v.x * m.m[0][3] + v.y * m.m[1][3] + v.z * m.m[2][3] + v.w * m.m[3][3];
+	return result;
+}
+
 //アフィン変換
 Matrix4x4 Math::MakeAffineMatrix(const Vector3& scale, const Vector3& rotate, const Vector3& translate) {
 	Matrix4x4 rot = Multiply(Multiply(MakeRoteXMatrix(rotate.x), MakeRotateYMatrix(rotate.y)), MakeRotateZMatrix(rotate.z));
@@ -255,4 +264,10 @@ Matrix4x4 Math::Inverse(const Matrix4x4& m) {
 
 float Math::Dot(const Vector3 &v1, const Vector3 &v2) {
 	return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
+}
+
+Vector3 Math::TransformCoord(const Vector3 &v, const Matrix4x4 &m) {
+	Vector4 temp = { v.x, v.y, v.z, 1.0f };
+	temp = Multiply(temp, m);
+	return { temp.x / temp.w, temp.y / temp.w, temp.z / temp.w };
 }

@@ -42,6 +42,9 @@ public:
 
 	Vector3 Multiply(float scalar, const Vector3 &m1);
 
+	//ベクトルx行列
+	Vector4 Multiply(const Vector4 &v, const Matrix4x4 &m);
+
 	// アフィン変換行列
 	Matrix4x4 MakeAffineMatrix(const Vector3& scale, const Vector3& rotate, const Vector3& translate);
 
@@ -58,4 +61,7 @@ public:
 
 	//3Dベクトルの内積
 	float Dot(const Vector3 &v1, const Vector3 &v2);
+
+	// ワールド座標からスクリーン座標の変換
+	Vector3 TransformCoord(const Vector3 &v, const Matrix4x4 &m);
 };
