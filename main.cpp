@@ -3,7 +3,7 @@
 
 #include <numbers>
 #include <imgui.h>
-#include "Math.h"
+#include "math.h"
 
 using namespace KamataEngine::MathUtility;
 
@@ -11,10 +11,10 @@ using std::numbers::pi_v;
 
 const char kWindowTitle[] = "LE2C_07_sasnami_sousi";
 
-struct Sphere {
-	Vector3 center; //中心点
-	float radius;   //半径
-	Vector3 color;
+struct Segment {
+	Vector3 origin;   //始点
+	Vector3 diff;     //終点
+	uint32_t color;
 };
 
 struct Plane {
@@ -69,61 +69,15 @@ void DrawGrid(const Matrix4x4 &viewProjectionMatrix, const Matrix4x4 &viewportMa
 }
 
 
-void DrawSphere(const Sphere &sphere, const Matrix4x4 &viewProjectionMatrix, const Matrix4x4 &viewportMatrix, uint32_t color) {
-	const float pi = 3.1415926535f;
-	const uint32_t kSubdivision = 10;  //分離数
-	const float kLonEvery = 2.0f * pi / float(kSubdivision);//軽度１つ分の角度
-	const float kLatEvery = pi / float(kSubdivision);//緯度分割1つ分の角度
-
-	//緯度の方向に分割　-π/2~π/2
-	for (uint32_t latIndex = 0; latIndex < kSubdivision; ++latIndex) {
-		float lat = -pi / 2.0f + kLatEvery * latIndex;  //現在の軽度
-
-		//軽度の方向に分割
-		for (uint32_t lonIndex = 0; lonIndex < kSubdivision; ++lonIndex) {
-			float lon = lonIndex * kLonEvery;  //現在の軽度
-			Vector3 a = {
-				sphere.center.x + sphere.radius * cosf(lat) * cosf(lon),
-				sphere.center.y + sphere.radius * sinf(lat),
-				sphere.center.z + sphere.radius * cosf(lat) * sinf(lon)
-			};
-
-			Vector3 b = {
-				sphere.center.x + sphere.radius * cosf(lat + kLatEvery) * cosf(lon),
-				sphere.center.y + sphere.radius * sinf(lat + kLatEvery),
-				sphere.center.z + sphere.radius * cosf(lat + kLatEvery) * sinf(lon)
-			};
-
-			Vector3 c = {
-				sphere.center.x + sphere.radius * cosf(lat) * cos(lon + kLonEvery),
-				sphere.center.y + sphere.radius * sinf(lat),
-				sphere.center.z + sphere.radius * cosf(lat) * sinf(lon + kLonEvery)
-			};
-
-			a = math_.Transform(a, viewProjectionMatrix);
-			a = math_.Transform(a, viewportMatrix);
-			b = math_.Transform(b, viewProjectionMatrix);
-			b = math_.Transform(b, viewportMatrix);
-			c = math_.Transform(c, viewProjectionMatrix);
-			c = math_.Transform(c, viewportMatrix);
-
-			Novice::DrawLine(int(a.x), int(a.y), int(b.x), int(b.y), color);
-
-			Novice::DrawLine(int(a.x), int(a.y), int(c.x), int(c.y), color);
-		}
-	}
-}
-
-bool IsCollision(const Sphere &sphere, const Plane &plane) {
-	// 球の中心と平面との距離を計算
-	float signedDistance =
-		sphere.center.x * plane.normal.x +
-		sphere.center.y * plane.normal.y +
-		sphere.center.z * plane.normal.z -
-		plane.distance;
 
 
-	return fabsf(signedDistance) <= sphere.radius;
+bool IsCollision(const Segment &segment, const Plane &plane) {
+	// 始点と終点の距離を法線方向に投影
+	float d1 = math_.Dot(segment.origin, plane.normal) - plane.distance;
+	float d2 = math_.Dot(segment.diff, plane.normal) - plane.distance;
+
+	// 片方が正、片方が負 → 交差している
+	return (d1 * d2 <= 0.0f);
 }
 
 uint32_t ConvertColor(const Vector3 &color) {
@@ -190,9 +144,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	Vector3 cameraTranslate{ 0.0f,0.5f,-7.49f };
 	Vector3 cameraRotate{ -0.2f,0.0f,0.0f };
-	Sphere sphere1{ {0.0f, 0.0f, 0.5f}, 1.0f,{1.0f, 1.0f, 1.0f} };
-	
-
+	Segment segment = { {-1.0f, 1.0f, 0.0f}, {1.0f, -1.0f, 0.0f},0xFFFFFFFF };
 
 	// ウィンドウの×ボタンが押されるまでループ
 	while (Novice::ProcessMessage() == 0) {
@@ -209,10 +161,10 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		plane.normal = Normalize(plane.normal);
 
-		if (IsCollision(sphere1, plane)) {
-			sphere1.color = { 1.0f, 0.0f, 0.0f };  // 衝突した方だけ色を変える
+		if (IsCollision(segment, plane)) {
+			segment.color = 0xFF0000FF;  //衝突したら色を赤にする
 		} else {
-			sphere1.color = { 1.0f, 1.0f, 1.0f };  // 元に戻す
+			segment.color = 0xFFFFFFFF;
 		}
 
 		Matrix4x4 viewMatrix = math_.MakeAffineMatrix({ 1.0f, 1.0f, 1.0f }, cameraRotate, cameraTranslate);
@@ -232,16 +184,19 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		ImGui::Begin("Window");
 		ImGui::DragFloat3("CameraTranslate", &cameraTranslate.x, 0.01f);
 		ImGui::DragFloat3("CameraRotate", &cameraRotate.x, 0.01f);
-		ImGui::DragFloat3("SphereCenter1", &sphere1.center.x, 0.01f);
-		ImGui::DragFloat("SphereRadius1", &sphere1.radius, 0.01f);
 		ImGui::DragFloat3("plane.Normal", &plane.normal.x, 0.01f);
 		ImGui::DragFloat("Plane Distance", &plane.distance, 0.01f);
+		ImGui::DragFloat3("Segment.Origin", &segment.origin.x, 0.01f);
+		ImGui::DragFloat3("Segment.Diff", &segment.diff.x, 0.01f);
 		ImGui::End();
 
 
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
-		DrawSphere(sphere1, viewProjectionMatrix, viewportMatrix, ConvertColor(sphere1.color));
 		DrawPlane(plane, viewProjectionMatrix, viewportMatrix, 0x00FF00FF);
+
+		Vector3 start = math_.Transform(math_.Transform(segment.origin, viewProjectionMatrix), viewportMatrix);
+		Vector3 end = math_.Transform(math_.Transform(math_.Add(segment.origin, segment.diff), viewProjectionMatrix), viewportMatrix);
+		Novice::DrawLine(int(start.x), int(start.y), int(end.x), int(end.y), segment.color);
 
 		///
 		/// ↑描画処理ここまで

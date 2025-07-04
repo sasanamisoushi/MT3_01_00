@@ -252,3 +252,7 @@ Matrix4x4 Math::Inverse(const Matrix4x4& m) {
 		m.m[0][2] * m.m[1][1] * m.m[2][0] - m.m[0][1] * m.m[1][0] * m.m[2][2] - m.m[0][0] * m.m[1][2] * m.m[2][1]);
 	return result;
 }
+
+float Math::Dot(const Vector3 &v1, const Vector3 &v2) {
+	return v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
+}
