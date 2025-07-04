@@ -17,12 +17,40 @@ struct Segment {
 	uint32_t color;
 };
 
-struct Plane {
-	Vector3 normal;
-	float distance;
+
+
+struct Triangle {
+	Vector3 vertices[3];
 };
 
 Math math_;
+
+uint32_t ConvertColor(const Vector3 &color) {
+	return (static_cast<int>(color.x * 255.0f) << 24) |
+		(static_cast<int>(color.y * 255.0f) << 16) |
+		(static_cast<int>(color.z * 255.0f) << 8) | 0xFF;
+}
+
+Vector3 Perpendicular(const Vector3 &vector) {
+	if (vector.x != 0.0f || vector.y != 0.0f) {
+		return { -vector.y, vector.x, 0.0f };
+	}
+	return { 0.0f, -vector.z, vector.y };
+}
+
+Vector3 Normalize(const Vector3 &v) {
+	float length = Length(v);
+	if (length == 0.0f) return { 0.0f, 0.0f, 0.0f };
+	return { v.x / length, v.y / length, v.z / length };
+}
+
+Vector3 cross(const Vector3 &v1, const Vector3 &v2) {
+	Vector3 result;
+	result.x = v1.y * v2.z - v1.z * v2.y;
+	result.y = v1.z * v2.x - v1.x * v2.z;
+	result.z = v1.x * v2.y - v1.y * v2.x;
+	return result;
+}
 
 void DrawGrid(const Matrix4x4 &viewProjectionMatrix, const Matrix4x4 &viewportMatrix) {
 	const float kGridHalfWidth = 2.0f;                                      //Gridの半分の幅
@@ -71,66 +99,60 @@ void DrawGrid(const Matrix4x4 &viewProjectionMatrix, const Matrix4x4 &viewportMa
 
 
 
-bool IsCollision(const Segment &segment, const Plane &plane) {
-	// 始点と終点の距離を法線方向に投影
-	float d1 = math_.Dot(segment.origin, plane.normal) - plane.distance;
-	float d2 = math_.Dot(segment.diff, plane.normal) - plane.distance;
+bool IsCollision(const Triangle &triangle, const Segment &segment) {
+	Vector3 edge1 = math_.Subtract(triangle.vertices[1], triangle.vertices[0]);
+	Vector3 edge2 = math_.Subtract(triangle.vertices[2], triangle.vertices[0]);
+	Vector3 normal = Normalize(cross(edge1, edge2));
 
-	// 片方が正、片方が負 → 交差している
-	return (d1 * d2 <= 0.0f);
+	float d1 = math_.Dot(segment.origin, normal) - math_.Dot(triangle.vertices[0], normal);
+	Vector3 end = math_.Add(segment.origin, segment.diff);
+	float d2 = math_.Dot(end, normal) - math_.Dot(triangle.vertices[0], normal);
+
+	if (d1 * d2 > 0.0f) return false;
+
+	float t = d1 / (d1 - d2);
+	Vector3 point = {
+		segment.origin.x + segment.diff.x * t,
+		segment.origin.y + segment.diff.y * t,
+		segment.origin.z + segment.diff.z * t
+	};
+
+	Vector3 v0 = edge1;
+	Vector3 v1 = edge2;
+	Vector3 v2 = math_.Subtract(point, triangle.vertices[0]);
+
+	float d00 = math_.Dot(v0, v0);
+	float d01 = math_.Dot(v0, v1);
+	float d11 = math_.Dot(v1, v1);
+	float d20 = math_.Dot(v2, v0);
+	float d21 = math_.Dot(v2, v1);
+
+	float denom = d00 * d11 - d01 * d01;
+	if (denom == 0.0f) return false;
+
+	float v = (d11 * d20 - d01 * d21) / denom;
+	float w = (d00 * d21 - d01 * d20) / denom;
+	float u = 1.0f - v - w;
+
+	const float epsilon = 1e-5f;
+	return (u >= -epsilon && v >= -epsilon && w >= -epsilon);
 }
 
-uint32_t ConvertColor(const Vector3 &color) {
-	return (static_cast<int>(color.x * 255.0f) << 24) |
-		(static_cast<int>(color.y * 255.0f) << 16) |
-		(static_cast<int>(color.z * 255.0f) << 8) | 0xFF;
+
+
+void DrawTriangle(const Triangle &triangle, const Matrix4x4 &viewportMatrix, uint32_t color) {
+	// 3点をビューポート変換
+	Vector3 p0 = math_.Transform(triangle.vertices[0], viewportMatrix);
+	Vector3 p1 = math_.Transform(triangle.vertices[1], viewportMatrix);
+	Vector3 p2 = math_.Transform(triangle.vertices[2], viewportMatrix);
+
+	Novice::DrawTriangle(
+		static_cast<int>(p0.x), static_cast<int>(p0.y),
+		static_cast<int>(p1.x), static_cast<int>(p1.y),
+		static_cast<int>(p2.x), static_cast<int>(p2.y),
+		color, kFillModeWireFrame
+	);
 }
-
-Vector3 Perpendicular(const Vector3 &vector) {
-	if (vector.x != 0.0f || vector.y != 0.0f) {
-		return { -vector.y, vector.x, 0.0f };
-	}
-	return { 0.0f, -vector.z, vector.y };
-}
-
-Vector3 Normalize(const Vector3 &v) {
-	float length = Length(v);
-	if (length == 0.0f) return { 0.0f, 0.0f, 0.0f };
-	return { v.x / length, v.y / length, v.z / length };
-}
-
-Vector3 cross(const Vector3 &v1, const Vector3 &v2) {
-	Vector3 result;
-	result.x = v1.y * v2.z - v1.z * v2.y;
-	result.y = v1.z * v2.x - v1.x * v2.z;
-	result.z = v1.x * v2.y - v1.y * v2.x;
-	return result;
-}
-
-void DrawPlane(const Plane &plane, const Matrix4x4 &viewProjectionMatrix, const Matrix4x4 &viewportMatrix, uint32_t color) {
-	Vector3 center = math_.Multiply(plane.distance, plane.normal);
-	Vector3 perpendiculars[4];
-	perpendiculars[0] = Normalize(Perpendicular(plane.normal));
-	perpendiculars[1] = { -perpendiculars[0].x,-perpendiculars[0].y, - perpendiculars[0].z };
-	perpendiculars[2] = cross(plane.normal, perpendiculars[0]);
-	perpendiculars[3] = { -perpendiculars[2].x,-perpendiculars[2].y,-perpendiculars[2].z };
-
-	
-	Vector3 points[4];
-	for (int32_t index = 0; index < 4; ++index) {
-		Vector3 extend = math_.Multiply(2.0f, perpendiculars[index]);
-		Vector3 point = math_.Add(center, extend);
-		points[index] = math_.Transform(math_.Transform(point, viewProjectionMatrix), viewportMatrix);
-	}
-
-	Novice::DrawLine((int)points[0].x, (int)points[0].y, (int)points[2].x, (int)points[2].y, color);
-	Novice::DrawLine((int)points[2].x, (int)points[2].y, (int)points[1].x, (int)points[1].y, color);
-	Novice::DrawLine((int)points[1].x, (int)points[1].y, (int)points[3].x, (int)points[3].y, color);
-	Novice::DrawLine((int)points[3].x, (int)points[3].y, (int)points[0].x, (int)points[0].y, color);
-}
-
-Plane plane = { {0.0f,1.0f,0.0f},0.0f };
-
 // Windowsアプリでのエントリーポイント(main関数)
 int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
@@ -144,7 +166,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 	Vector3 cameraTranslate{ 0.0f,0.5f,-7.49f };
 	Vector3 cameraRotate{ -0.2f,0.0f,0.0f };
-	Segment segment = { {-1.0f, 1.0f, 0.0f}, {1.0f, -1.0f, 0.0f},0xFFFFFFFF };
+	Segment segment = { {-1.0f, 1.0f, -2.0f}, {2.0f, -2.0f, 4.0f}, 0xFFFFFFFF };
+	Triangle triangle = {
+	{
+		{ -0.5f, 0.0f, 0.0f },  // v0
+		{  0.5f, 0.0f, 0.0f },  // v1
+		{  0.0f, -1.0f, 0.0f }   // v2
+	}
+	};
 
 	// ウィンドウの×ボタンが押されるまでループ
 	while (Novice::ProcessMessage() == 0) {
@@ -159,9 +188,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓更新処理ここから
 		///
 
-		plane.normal = Normalize(plane.normal);
+		
 
-		if (IsCollision(segment, plane)) {
+		if (IsCollision(triangle,segment)) {
 			segment.color = 0xFF0000FF;  //衝突したら色を赤にする
 		} else {
 			segment.color = 0xFFFFFFFF;
@@ -184,18 +213,21 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		ImGui::Begin("Window");
 		ImGui::DragFloat3("CameraTranslate", &cameraTranslate.x, 0.01f);
 		ImGui::DragFloat3("CameraRotate", &cameraRotate.x, 0.01f);
-		ImGui::DragFloat3("plane.Normal", &plane.normal.x, 0.01f);
-		ImGui::DragFloat("Plane Distance", &plane.distance, 0.01f);
+		ImGui::DragFloat3("Traiangle.v0", &triangle.vertices[0].x, 0.01f);
+		ImGui::DragFloat3("Traiangle.v1", &triangle.vertices[1].x, 0.01f);
+		ImGui::DragFloat3("Traiangle.v2", &triangle.vertices[2].x, 0.01f);
 		ImGui::DragFloat3("Segment.Origin", &segment.origin.x, 0.01f);
 		ImGui::DragFloat3("Segment.Diff", &segment.diff.x, 0.01f);
 		ImGui::End();
 
 
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
-		DrawPlane(plane, viewProjectionMatrix, viewportMatrix, 0x00FF00FF);
+		Matrix4x4 viewProjectionViewportMatrix = math_.Multiply(viewProjectionMatrix, viewportMatrix);
+		DrawTriangle(triangle, viewProjectionViewportMatrix, 0xFFFFFF);
+		Vector3 segmentEnd = math_.Add(segment.origin, segment.diff); // 終点 = 始点 + 差分
 
 		Vector3 start = math_.Transform(math_.Transform(segment.origin, viewProjectionMatrix), viewportMatrix);
-		Vector3 end = math_.Transform(math_.Transform(math_.Add(segment.origin, segment.diff), viewProjectionMatrix), viewportMatrix);
+		Vector3 end = math_.Transform(math_.Transform(segmentEnd, viewProjectionMatrix), viewportMatrix);
 		Novice::DrawLine(int(start.x), int(start.y), int(end.x), int(end.y), segment.color);
 
 		///
