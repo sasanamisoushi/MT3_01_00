@@ -181,7 +181,7 @@ Matrix4x4 Math::MakeViewportMatrix(float width, float height) {
 	Matrix4x4 result = {};
 
 	result.m[0][0] = width / 2.0f;
-	result.m[1][1] = -height / 2.0f; // Y軸は上下逆
+	result.m[1][1] = -height / 2.0f; 
 	result.m[2][2] = 1.0f;
 	result.m[3][0] = width / 2.0f;
 	result.m[3][1] = height / 2.0f;

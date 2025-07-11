@@ -162,13 +162,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	char preKeys[256] = { 0 };
 
 
-	Vector3 cameraTranslate{ 0.0f,0.5f,-7.49f };
-	Vector3 cameraRotate{ -0.2f,0.0f,0.0f };
+	Vector3 cameraTranslate{ 0.0f,2.0f,-7.49f };
+	Vector3 cameraRotate{ 0.2f,0.0f,0.0f };
 
 	AABB aabb1{
-  .min{-0.5f, 0.01f, -0.5f},  
-  .max{0.0f, 0.51f, 0.0f},   
-  .color{0xFFFFFFFF},
+		.min{-0.5f, 0.01f, -0.5f},
+		.max{0.0f, 0.51f, 0.0f},
+		.color{0xFFFFFFFF},
 	};
 
 	AABB aabb2{
@@ -191,6 +191,12 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓更新処理ここから
 		///
 
+		aabb1.min.x = (std::min)(aabb1.min.x,aabb1.max.x);
+		aabb1.max.x = (std::max)(aabb1.min.x, aabb1.max.x);
+		aabb1.min.y = (std::min)(aabb1.min.y, aabb1.max.y);
+		aabb1.max.y = (std::max)(aabb1.min.y, aabb1.max.y);
+		aabb1.min.z = (std::min)(aabb1.min.z, aabb1.max.z);
+		aabb1.max.z = (std::max)(aabb1.min.z, aabb1.max.z);
 
 
 		if (IsCollision(aabb1, aabb2)) {
@@ -199,7 +205,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			aabb1.color = 0xFFFFFFFF;
 		}
 
-		Matrix4x4 viewMatrix = math_.MakeAffineMatrix({ 1.0f, 1.0f, 1.0f }, cameraRotate, cameraTranslate);
+		Matrix4x4 cameraMatrix = math_.MakeAffineMatrix({ 1.0f, 1.0f, 1.0f }, cameraRotate, cameraTranslate);
+		Matrix4x4 viewMatrix = math_.Inverse(cameraMatrix);
 		Matrix4x4 projectionMatrix = math_.MakePerspectiveFovMatrix(0.45f, 1280.0f / 720.0f, 0.1f, 100.0f);
 		Matrix4x4 viewProjectionMatrix = math_.Multiply(viewMatrix, projectionMatrix);
 		Matrix4x4 viewportMatrix = math_.MakeViewportMatrix(1280, 720);
@@ -222,9 +229,11 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		ImGui::DragFloat3("aabb2.max", &aabb2.max.x, 0.01f);
 		ImGui::End();
 
+		DrawGrid(viewProjectionMatrix, viewportMatrix);
+
 		DrawAABB(aabb1, viewProjectionMatrix, viewportMatrix, aabb1.color);
 		DrawAABB(aabb2, viewProjectionMatrix, viewportMatrix, aabb2.color);
-		DrawGrid(viewProjectionMatrix, viewportMatrix);
+		
 
 		///
 		/// ↑描画処理ここまで
