@@ -4,6 +4,7 @@
 #include <numbers>
 #include <imgui.h>
 #include "math.h"
+#include <algorithm>
 
 using namespace KamataEngine::MathUtility;
 
@@ -19,6 +20,11 @@ struct AABB {
 	uint32_t color;
 };
 
+struct Sphere {
+	Vector3 center; //中心点
+	float radius;   //半径
+	Vector3 color;
+};
 
 
 Math math_;
@@ -128,24 +134,75 @@ void DrawAABB(const AABB &aabb, const Matrix4x4 &viewProjectionMatrix, const Mat
 	}
 }
 
+void DrawSphere(const Sphere &sphere, const Matrix4x4 &viewProjectionMatrix, const Matrix4x4 &viewportMatrix, uint32_t color) {
+	const float pi = 3.1415926535f;
+	const uint32_t kSubdivision = 10;  //分離数
+	const float kLonEvery = 2.0f * pi / float(kSubdivision);//軽度１つ分の角度
+	const float kLatEvery = pi / float(kSubdivision);//緯度分割1つ分の角度
+
+	//緯度の方向に分割　-π/2~π/2
+	for (uint32_t latIndex = 0; latIndex < kSubdivision; ++latIndex) {
+		float lat = -pi / 2.0f + kLatEvery * latIndex;  //現在の軽度
+
+		//軽度の方向に分割
+		for (uint32_t lonIndex = 0; lonIndex < kSubdivision; ++lonIndex) {
+			float lon = lonIndex * kLonEvery;  //現在の軽度
+			Vector3 a = {
+				sphere.center.x + sphere.radius * cosf(lat) * cosf(lon),
+				sphere.center.y + sphere.radius * sinf(lat),
+				sphere.center.z + sphere.radius * cosf(lat) * sinf(lon)
+			};
+
+			Vector3 b = {
+				sphere.center.x + sphere.radius * cosf(lat + kLatEvery) * cosf(lon),
+				sphere.center.y + sphere.radius * sinf(lat + kLatEvery),
+				sphere.center.z + sphere.radius * cosf(lat + kLatEvery) * sinf(lon)
+			};
+
+			Vector3 c = {
+				sphere.center.x + sphere.radius * cosf(lat) * cos(lon + kLonEvery),
+				sphere.center.y + sphere.radius * sinf(lat),
+				sphere.center.z + sphere.radius * cosf(lat) * sinf(lon + kLonEvery)
+			};
+
+			a = math_.Transform(a, viewProjectionMatrix);
+			a = math_.Transform(a, viewportMatrix);
+			b = math_.Transform(b, viewProjectionMatrix);
+			b = math_.Transform(b, viewportMatrix);
+			c = math_.Transform(c, viewProjectionMatrix);
+			c = math_.Transform(c, viewportMatrix);
+
+			Novice::DrawLine(int(a.x), int(a.y), int(b.x), int(b.y), color);
+
+			Novice::DrawLine(int(a.x), int(a.y), int(c.x), int(c.y), color);
+		}
+	}
+}
 
 
-bool IsCollision(const AABB &aabb1, const AABB &aabb2) {
-	// X軸で分離していないか確認
-	if (aabb1.max.x < aabb2.min.x || aabb1.min.x > aabb2.max.x) {
-		return false;
-	}
-	// Y軸で分離していないか確認
-	if (aabb1.max.y < aabb2.min.y || aabb1.min.y > aabb2.max.y) {
-		return false;
-	}
-	// Z軸で分離していないか確認
-	if (aabb1.max.z < aabb2.min.z || aabb1.min.z > aabb2.max.z) {
-		return false;
-	}
+bool IsCollision(const AABB &aabb1, const Sphere &sphere1) {
+	// 球の中心点
+		const Vector3 & center = sphere1.center;
 
-	// すべての軸で重なっていれば衝突
-	return true;
+	// 最近接点（AABB上で球の中心に最も近い点）を求める
+	Vector3 closestPoint;
+	closestPoint.x = std::clamp(center.x, aabb1.min.x, aabb1.max.x);
+	closestPoint.y = std::clamp(center.y, aabb1.min.y, aabb1.max.y);
+	closestPoint.z = std::clamp(center.z, aabb1.min.z, aabb1.max.z);
+
+	// 最近接点と球の中心の距離を求める
+	Vector3 difference = {
+		center.x - closestPoint.x,
+		center.y - closestPoint.y,
+		center.z - closestPoint.z
+	};
+
+	float distanceSq = difference.x * difference.x +
+		difference.y * difference.y +
+		difference.z * difference.z;
+
+	// 距離の二乗が半径の二乗より小さければ衝突
+	return distanceSq <= (sphere1.radius * sphere1.radius);
 }
 
 
@@ -171,12 +228,8 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		.color{0xFFFFFFFF},
 	};
 
-	AABB aabb2{
-	  .min{0.2f, 0.01f, 0.2f},
-	  .max{1.0f, 1.01f, 1.0f},
-	  .color{0xFFFFFFFF},
-	};
-
+	
+	Sphere sphere1{ {0.0f, 0.0f, 0.5f}, 1.0f,{1.0f, 1.0f, 1.0f} };
 
 	// ウィンドウの×ボタンが押されるまでループ
 	while (Novice::ProcessMessage() == 0) {
@@ -199,7 +252,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		aabb1.max.z = (std::max)(aabb1.min.z, aabb1.max.z);
 
 
-		if (IsCollision(aabb1, aabb2)) {
+		if (IsCollision(aabb1, sphere1)) {
 			aabb1.color = 0xFF0000FF;  //衝突したら色を赤にする
 		} else {
 			aabb1.color = 0xFFFFFFFF;
@@ -225,14 +278,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		ImGui::DragFloat3("CameraRotate", &cameraRotate.x, 0.01f);
 		ImGui::DragFloat3("aabb1.min", &aabb1.min.x, 0.01f);
 		ImGui::DragFloat3("aabb1.max", &aabb1.max.x, 0.01f);
-		ImGui::DragFloat3("aabb2.min", &aabb2.min.x, 0.01f);
-		ImGui::DragFloat3("aabb2.max", &aabb2.max.x, 0.01f);
+		ImGui::DragFloat3("SphereCenter1", &sphere1.center.x, 0.01f);
+		ImGui::DragFloat("SphereRadius1", &sphere1.radius, 0.01f);
 		ImGui::End();
 
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
 
 		DrawAABB(aabb1, viewProjectionMatrix, viewportMatrix, aabb1.color);
-		DrawAABB(aabb2, viewProjectionMatrix, viewportMatrix, aabb2.color);
+		DrawSphere(sphere1, viewProjectionMatrix, viewportMatrix, ConvertColor(sphere1.color));
 		
 
 		///
