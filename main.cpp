@@ -3,6 +3,9 @@
 #include <imgui.h>
 #include "math.h"
 #include <algorithm>
+#include "Mouse.h"
+
+
 
 using namespace KamataEngine::MathUtility;
 
@@ -10,7 +13,7 @@ using std::numbers::pi_v;
 
 const char kWindowTitle[] = "LE2C_07_sasnami_sousi";
 
-
+Mouse mouse;
 
 struct AABB {
 	Vector3 min;
@@ -18,10 +21,10 @@ struct AABB {
 	uint32_t color;
 };
 
-struct Sphere {
-	Vector3 center; //中心点
-	float radius;   //半径
-	Vector3 color;
+struct Segment {
+	Vector3 origin;   //始点
+	Vector3 diff;     //終点
+	uint32_t color;
 };
 
 
@@ -132,75 +135,40 @@ void DrawAABB(const AABB &aabb, const Matrix4x4 &viewProjectionMatrix, const Mat
 	}
 }
 
-void DrawSphere(const Sphere &sphere, const Matrix4x4 &viewProjectionMatrix, const Matrix4x4 &viewportMatrix, uint32_t color) {
-	const float pi = 3.1415926535f;
-	const uint32_t kSubdivision = 10;  //分離数
-	const float kLonEvery = 2.0f * pi / float(kSubdivision);//軽度１つ分の角度
-	const float kLatEvery = pi / float(kSubdivision);//緯度分割1つ分の角度
 
-	//緯度の方向に分割　-π/2~π/2
-	for (uint32_t latIndex = 0; latIndex < kSubdivision; ++latIndex) {
-		float lat = -pi / 2.0f + kLatEvery * latIndex;  //現在の軽度
 
-		//軽度の方向に分割
-		for (uint32_t lonIndex = 0; lonIndex < kSubdivision; ++lonIndex) {
-			float lon = lonIndex * kLonEvery;  //現在の軽度
-			Vector3 a = {
-				sphere.center.x + sphere.radius * cosf(lat) * cosf(lon),
-				sphere.center.y + sphere.radius * sinf(lat),
-				sphere.center.z + sphere.radius * cosf(lat) * sinf(lon)
-			};
 
-			Vector3 b = {
-				sphere.center.x + sphere.radius * cosf(lat + kLatEvery) * cosf(lon),
-				sphere.center.y + sphere.radius * sinf(lat + kLatEvery),
-				sphere.center.z + sphere.radius * cosf(lat + kLatEvery) * sinf(lon)
-			};
+bool IsCollision(const AABB &aabb1, const Segment &segment) {
+	float tMin = 0.0f;
+	float tMax = 1.0f;
 
-			Vector3 c = {
-				sphere.center.x + sphere.radius * cosf(lat) * cos(lon + kLonEvery),
-				sphere.center.y + sphere.radius * sinf(lat),
-				sphere.center.z + sphere.radius * cosf(lat) * sinf(lon + kLonEvery)
-			};
+	for (int i = 0; i < 3; ++i) {
+		float origin = (&segment.origin.x)[i];
+		float dir = (&segment.diff.x)[i];
+		float min = (&aabb1.min.x)[i];
+		float max = (&aabb1.max.x)[i];
 
-			a = math_.Transform(a, viewProjectionMatrix);
-			a = math_.Transform(a, viewportMatrix);
-			b = math_.Transform(b, viewProjectionMatrix);
-			b = math_.Transform(b, viewportMatrix);
-			c = math_.Transform(c, viewProjectionMatrix);
-			c = math_.Transform(c, viewportMatrix);
+		if (fabsf(dir) < 1e-6f) {
+			// 線分がこの軸に平行な場合、AABB の範囲に origin が入っていなければ交差しない
+			if (origin < min || origin > max) {
+				return false;
+			}
+		} else {
+			float t1 = (min - origin) / dir;
+			float t2 = (max - origin) / dir;
 
-			Novice::DrawLine(int(a.x), int(a.y), int(b.x), int(b.y), color);
+			if (t1 > t2) std::swap(t1, t2);
 
-			Novice::DrawLine(int(a.x), int(a.y), int(c.x), int(c.y), color);
+			tMin = std::max<float>(tMin, t1);
+			tMax = std::min<float>(tMax, t2);
+
+			if (tMin > tMax) {
+				return false;
+			}
 		}
 	}
-}
 
-
-bool IsCollision(const AABB &aabb1, const Sphere &sphere1) {
-	// 球の中心点
-	const Vector3 &center = sphere1.center;
-
-	// 最近接点（AABB上で球の中心に最も近い点）を求める
-	Vector3 closestPoint;
-	closestPoint.x = std::clamp(center.x, aabb1.min.x, aabb1.max.x);
-	closestPoint.y = std::clamp(center.y, aabb1.min.y, aabb1.max.y);
-	closestPoint.z = std::clamp(center.z, aabb1.min.z, aabb1.max.z);
-
-	// 最近接点と球の中心の距離を求める
-	Vector3 difference = {
-		center.x - closestPoint.x,
-		center.y - closestPoint.y,
-		center.z - closestPoint.z
-	};
-
-	float distanceSq = difference.x * difference.x +
-		difference.y * difference.y +
-		difference.z * difference.z;
-
-	// 距離の二乗が半径の二乗より小さければ衝突
-	return distanceSq <= (sphere1.radius * sphere1.radius);
+	return true;
 }
 
 
@@ -227,14 +195,14 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	};
 
 
-	Sphere sphere1{ {0.0f, 0.0f, 0.5f}, 1.0f,{1.0f, 1.0f, 1.0f} };
+	Segment segment = { {-1.0f, 1.0f, -2.0f}, {2.0f, -2.0f, 4.0f}, 0xFFFFFFFF };
 
 	// マウス入力取得
 	int mouseX = 0, mouseY = 0;
 	static int preMouseX = 0, preMouseY = 0;
 	Novice::GetMousePosition(&mouseX, &mouseY);
 
-	
+	mouse.Initialize();
 
 	// ウィンドウの×ボタンが押されるまでループ
 	while (Novice::ProcessMessage() == 0) {
@@ -249,6 +217,13 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓更新処理ここから
 		///
 
+		
+
+		mouse.Update(keys);
+
+		cameraRotate = mouse.GetRotate();
+		cameraTranslate = mouse.GetPosition();
+
 		aabb1.min.x = (std::min)(aabb1.min.x, aabb1.max.x);
 		aabb1.max.x = (std::max)(aabb1.min.x, aabb1.max.x);
 		aabb1.min.y = (std::min)(aabb1.min.y, aabb1.max.y);
@@ -257,7 +232,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		aabb1.max.z = (std::max)(aabb1.min.z, aabb1.max.z);
 
 
-		if (IsCollision(aabb1, sphere1)) {
+		if (IsCollision(aabb1, segment)) {
 			aabb1.color = 0xFF0000FF;  //衝突したら色を赤にする
 		} else {
 			aabb1.color = 0xFFFFFFFF;
@@ -280,18 +255,23 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		///
 
 		ImGui::Begin("Window");
-		ImGui::DragFloat3("CameraTranslate", &cameraTranslate.x, 0.01f);
-		ImGui::DragFloat3("CameraRotate", &cameraRotate.x, 0.01f);
+		ImGui::DragFloat3("Camera Pos", &cameraTranslate.x, 0.01f);
+		ImGui::DragFloat3("Camera Rot", &cameraRotate.x, 0.01f);
+		
 		ImGui::DragFloat3("aabb1.min", &aabb1.min.x, 0.01f);
 		ImGui::DragFloat3("aabb1.max", &aabb1.max.x, 0.01f);
-		ImGui::DragFloat3("SphereCenter1", &sphere1.center.x, 0.01f);
-		ImGui::DragFloat("SphereRadius1", &sphere1.radius, 0.01f);
+		ImGui::DragFloat3("Segment.Origin", &segment.origin.x, 0.01f);
+		ImGui::DragFloat3("Segment.Diff", &segment.diff.x, 0.01f);
 		ImGui::End();
 
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
 
 		DrawAABB(aabb1, viewProjectionMatrix, viewportMatrix, aabb1.color);
-		DrawSphere(sphere1, viewProjectionMatrix, viewportMatrix, ConvertColor(sphere1.color));
+		
+		Vector3 segmentEnd = math_.Add(segment.origin, segment.diff);
+		Vector3 start = math_.Transform(math_.Transform(segment.origin, viewProjectionMatrix), viewportMatrix);
+		Vector3 end = math_.Transform(math_.Transform(segmentEnd, viewProjectionMatrix), viewportMatrix);
+		Novice::DrawLine(int(start.x), int(start.y), int(end.x), int(end.y), segment.color);
 
 
 		///
