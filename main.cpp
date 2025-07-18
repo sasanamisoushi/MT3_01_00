@@ -1,6 +1,4 @@
-
 #include <Novice.h>
-
 #include <numbers>
 #include <imgui.h>
 #include "math.h"
@@ -182,7 +180,7 @@ void DrawSphere(const Sphere &sphere, const Matrix4x4 &viewProjectionMatrix, con
 
 bool IsCollision(const AABB &aabb1, const Sphere &sphere1) {
 	// 球の中心点
-		const Vector3 & center = sphere1.center;
+	const Vector3 &center = sphere1.center;
 
 	// 最近接点（AABB上で球の中心に最も近い点）を求める
 	Vector3 closestPoint;
@@ -228,8 +226,15 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		.color{0xFFFFFFFF},
 	};
 
-	
+
 	Sphere sphere1{ {0.0f, 0.0f, 0.5f}, 1.0f,{1.0f, 1.0f, 1.0f} };
+
+	// マウス入力取得
+	int mouseX = 0, mouseY = 0;
+	static int preMouseX = 0, preMouseY = 0;
+	Novice::GetMousePosition(&mouseX, &mouseY);
+
+	
 
 	// ウィンドウの×ボタンが押されるまでループ
 	while (Novice::ProcessMessage() == 0) {
@@ -244,7 +249,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		/// ↓更新処理ここから
 		///
 
-		aabb1.min.x = (std::min)(aabb1.min.x,aabb1.max.x);
+		aabb1.min.x = (std::min)(aabb1.min.x, aabb1.max.x);
 		aabb1.max.x = (std::max)(aabb1.min.x, aabb1.max.x);
 		aabb1.min.y = (std::min)(aabb1.min.y, aabb1.max.y);
 		aabb1.max.y = (std::max)(aabb1.min.y, aabb1.max.y);
@@ -264,6 +269,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		Matrix4x4 viewProjectionMatrix = math_.Multiply(viewMatrix, projectionMatrix);
 		Matrix4x4 viewportMatrix = math_.MakeViewportMatrix(1280, 720);
 
+		
 
 		///
 		/// ↑更新処理ここまで
@@ -286,7 +292,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 
 		DrawAABB(aabb1, viewProjectionMatrix, viewportMatrix, aabb1.color);
 		DrawSphere(sphere1, viewProjectionMatrix, viewportMatrix, ConvertColor(sphere1.color));
-		
+
 
 		///
 		/// ↑描画処理ここまで
