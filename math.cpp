@@ -271,3 +271,7 @@ Vector3 Math::TransformCoord(const Vector3 &v, const Matrix4x4 &m) {
 	temp = Multiply(temp, m);
 	return { temp.x / temp.w, temp.y / temp.w, temp.z / temp.w };
 }
+
+Vector3 Math::Leap(const Vector3 &v1, const Vector3 &v2, float t) {
+	return v1 * (1.0f - t) + v2 * t;
+}

@@ -64,4 +64,6 @@ public:
 
 	// ワールド座標からスクリーン座標の変換
 	Vector3 TransformCoord(const Vector3 &v, const Matrix4x4 &m);
+
+	Vector3 Leap(const Vector3 &v1, const Vector3 &v2, float t);
 };
