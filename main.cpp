@@ -152,10 +152,24 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	Vector3 cameraRotate{ 0.2f,0.0f,0.0f };
 
 	
-	Vector3 controlPoints[3] = {
-		{-0.8f,0.58f,1.0f},
-		{1.76f,1.0f,-0.3f},
-		{0.94f,-0.7f,2.3f},
+	
+
+	Vector3 translates[3] = {
+		{0.2f,1.0f,0.0f},
+		{0.4f,0.0f,0.0f},
+		{0.3f,0.0f,0.0f},
+	};
+
+	Vector3 rotates[3] = {
+		{0.0f,0.0f,-6.8f},
+		{0.0f,0.0f,-1.4f},
+		{0.0f,0.0f,0.0f},
+	};
+
+	Vector3 scales[3] = {
+		{1.0f,1.0f,-6.8f},
+		{1.0f,1.0f,1.0f},
+		{1.0f,1.0f,1.0f},
 	};
 
 	
@@ -207,17 +221,67 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		ImGui::Begin("Window");
 		ImGui::DragFloat3("Camera Pos", &cameraTranslate.x, 0.01f);
 		ImGui::DragFloat3("Camera Rot", &cameraRotate.x, 0.01f);
-		ImGui::DragFloat3("controlPoints[0]", &controlPoints[0].x, 0.01f);
-		ImGui::DragFloat3("controlPoints[1]", &controlPoints[1].x, 0.01f);
-		ImGui::DragFloat3("controlPoints[2]", &controlPoints[2].x, 0.01f);
+		ImGui::DragFloat3("translates[0]", &translates[0].x, 0.01f);
+		ImGui::DragFloat3("rotates[0]", &rotates[0].x, 0.01f);
+		ImGui::DragFloat3("scales[0]", &scales[0].x, 0.01f);
+		ImGui::DragFloat3("translates[1]", &translates[1].x, 0.01f);
+		ImGui::DragFloat3("rotates[1]", &rotates[1].x, 0.01f);
+		ImGui::DragFloat3("scales[1]", &scales[1].x, 0.01f);
+		ImGui::DragFloat3("translates[2]", &translates[2].x, 0.01f);
+		ImGui::DragFloat3("rotates[2]", &rotates[2].x, 0.01f);
+		ImGui::DragFloat3("scales[2]", &scales[2].x, 0.01f);
 		ImGui::End();
 
 		DrawGrid(viewProjectionMatrix, viewportMatrix);
 
-		Vector3 bezierColor = { 1.0f, 0.0f, 0.0f }; // 赤色
-		uint32_t color = ConvertColor(bezierColor);
+		// 階層構造でワールド行列を作成
+		Matrix4x4 localMatrix[3];
+		Matrix4x4 worldMatrix[3];
 
-		DrawBezier(controlPoints[0], controlPoints[1], controlPoints[2], viewProjectionMatrix, viewportMatrix, color);
+		// ローカル行列作成
+		for (int i = 0; i < 3; ++i) {
+			localMatrix[i] = math_.MakeAffineMatrix(scales[i], rotates[i], translates[i]);
+		}
+
+		// 階層構造
+		worldMatrix[0] = localMatrix[0];
+		worldMatrix[1] = math_.Multiply(localMatrix[1], worldMatrix[0]);
+		worldMatrix[2] = math_.Multiply(localMatrix[2], worldMatrix[1]);
+
+		// スクリーン座標に変換
+		Vector3 screenPoints[3];
+		for (int i = 0; i < 3; ++i) {
+			Vector3 pos = { 0.0f, 0.0f, 0.0f }; 
+			Vector3 worldPos = math_.Transform(pos, worldMatrix[i]);
+			Vector3 ndc = math_.Transform(worldPos, viewProjectionMatrix);
+			screenPoints[i] = math_.Transform(ndc, viewportMatrix);
+		}
+
+		// 色
+		uint32_t colors[3] = {
+			ConvertColor({1.0f, 0.0f, 0.0f}), //赤(肩)
+			ConvertColor({0.0f, 1.0f, 0.0f}), //緑(肘)
+			ConvertColor({0.0f, 0.0f, 1.0f})  //青(手)
+		};
+
+		// 円
+		for (int i = 0; i < 3; ++i) {
+			int x = static_cast<int>(screenPoints[i].x);
+			int y = static_cast<int>(screenPoints[i].y);
+			Novice::DrawEllipse(x, y, 6, 6, 0.0f, colors[i], kFillModeSolid);
+		}
+
+		// 線
+		Novice::DrawLine(
+			static_cast<int>(screenPoints[0].x), static_cast<int>(screenPoints[0].y),
+			static_cast<int>(screenPoints[1].x), static_cast<int>(screenPoints[1].y),
+			0xFFFFFFFF
+		);
+		Novice::DrawLine(
+			static_cast<int>(screenPoints[1].x), static_cast<int>(screenPoints[1].y),
+			static_cast<int>(screenPoints[2].x), static_cast<int>(screenPoints[2].y),
+			0xFFFFFFFF
+		);
 	
 
 		///
