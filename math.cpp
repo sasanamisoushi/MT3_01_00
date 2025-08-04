@@ -32,9 +32,30 @@ Vector3 &operator+(const Vector3 &v1, const Vector3 &v2) {
 	return temp += v2;
 }
 
+Vector3 &operator-(const Vector3 &v1, const Vector3 &v2) {
+	Vector3 temp(v1);
+	return temp -= v2;
+}
+
 const Vector3 operator*(const Vector3 &v1, const float f) {
 	Vector3 temp(v1);
 	return temp *= f;
+}
+
+const Matrix4x4 operator*(const Matrix4x4 &m1, const Matrix4x4 &m2) {
+	Matrix4x4 result = {};
+
+	for (int row = 0; row < 4; ++row) {
+		for (int col = 0; col < 4; ++col) {
+			result.m[row][col] =
+				m1.m[row][0] * m2.m[0][col] +
+				m1.m[row][1] * m2.m[1][col] +
+				m1.m[row][2] * m2.m[2][col] +
+				m1.m[row][3] * m2.m[3][col];
+		}
+	}
+
+	return result;
 }
 
 
